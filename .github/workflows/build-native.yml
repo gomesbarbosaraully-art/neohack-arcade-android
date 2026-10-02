@@ -1,0 +1,69 @@
+name: Build NeoHack Arcade APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Install Android SDK and NDK
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
+            "platforms;android-35" "build-tools;35.0.0" \
+            "ndk;${NDK_VERSION}" "cmake;3.22.1"
+      - name: Generate Android project files
+        run: python3 make_apk_project.py
+      - name: Build FBNeo native core for old and new ARM phones
+        run: |
+          git clone --depth 1 https://github.com/libretro/FBNeo.git "$RUNNER_TEMP/FBNeo"
+          cd "$RUNNER_TEMP/FBNeo/src/burner/libretro/jni"
+          "$ANDROID_HOME/ndk/${NDK_VERSION}/ndk-build" \
+            APP_ABI="armeabi-v7a arm64-v8a" APP_PLATFORM=android-21 -j2
+          mkdir -p "$GITHUB_WORKSPACE/app/src/main/jniLibs/armeabi-v7a"
+          mkdir -p "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a"
+          cp libs/armeabi-v7a/libretro.so \
+            "$GITHUB_WORKSPACE/app/src/main/jniLibs/armeabi-v7a/libfbneo_libretro_android.so"
+          cp libs/arm64-v8a/libretro.so \
+            "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libfbneo_libretro_android.so"
+          mkdir -p "$GITHUB_WORKSPACE/app/src/main/assets"
+          cp "$RUNNER_TEMP/FBNeo/src/license.txt" \
+            "$GITHUB_WORKSPACE/app/src/main/assets/FBNeo-LICENSE.txt"
+          curl -fL --retry 3 \
+            https://raw.githubusercontent.com/Swordfish90/LibretroDroid/0.13.2/LICENSE \
+            -o "$GITHUB_WORKSPACE/app/src/main/assets/LibretroDroid-LICENSE.txt"
+      - name: Build installable native APK
+        run: gradle assembleDebug --no-daemon
+      - name: Publish direct APK download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/NeoHackArcade-native.apk
+          gh release create "native-${GITHUB_RUN_NUMBER}" dist/NeoHackArcade-native.apk \
+            --target "$GITHUB_SHA" \
+            --title "NeoHack Arcade native APK ${GITHUB_RUN_NUMBER}" \
+            --notes "FBNeo native core for armeabi-v7a and arm64-v8a. No ROMs or BIOS included. Android 5.0+ target; ROM/BIOS provided by user."
