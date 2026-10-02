@@ -45,10 +45,15 @@ jobs:
             APP_ABI="armeabi-v7a arm64-v8a" APP_PLATFORM=android-21 -j2
           mkdir -p "$GITHUB_WORKSPACE/app/src/main/jniLibs/armeabi-v7a"
           mkdir -p "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a"
-          cp libs/armeabi-v7a/libretro.so \
-            "$GITHUB_WORKSPACE/app/src/main/jniLibs/armeabi-v7a/libfbneo_libretro_android.so"
-          cp libs/arm64-v8a/libretro.so \
-            "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libfbneo_libretro_android.so"
+          ARMV7_CORE=$(find "$RUNNER_TEMP/FBNeo" -type f -path '*/armeabi-v7a/libretro.so' -print -quit)
+          ARM64_CORE=$(find "$RUNNER_TEMP/FBNeo" -type f -path '*/arm64-v8a/libretro.so' -print -quit)
+          if [ -z "$ARMV7_CORE" ] || [ -z "$ARM64_CORE" ]; then
+            echo "Built FBNeo cores not found; searching output files:"
+            find "$RUNNER_TEMP/FBNeo" -type f -name libretro.so -print
+            exit 1
+          fi
+          cp "$ARMV7_CORE" "$GITHUB_WORKSPACE/app/src/main/jniLibs/armeabi-v7a/libfbneo_libretro_android.so"
+          cp "$ARM64_CORE" "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libfbneo_libretro_android.so"
           mkdir -p "$GITHUB_WORKSPACE/app/src/main/assets"
           cp "$RUNNER_TEMP/FBNeo/src/license.txt" \
             "$GITHUB_WORKSPACE/app/src/main/assets/FBNeo-LICENSE.txt"
