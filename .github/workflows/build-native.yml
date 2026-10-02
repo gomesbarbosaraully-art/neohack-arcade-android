@@ -37,6 +37,8 @@ jobs:
             "ndk;${NDK_VERSION}" "cmake;3.22.1"
       - name: Generate Android project files
         run: python3 make_apk_project.py
+      - name: Apply launcher artwork and fix duplicate Kotlin classes
+        run: python3 patch_native_project.py
       - name: Build FBNeo native core for old and new ARM phones
         run: |
           git clone --depth 1 https://github.com/libretro/FBNeo.git "$RUNNER_TEMP/FBNeo"
